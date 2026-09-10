@@ -1,0 +1,8 @@
+node_modules/
+data/tracker.db
+data/.session-secret
+cookies.txt
+cookies-viewer.txt
+.DS_Store
+.env
+.env.*

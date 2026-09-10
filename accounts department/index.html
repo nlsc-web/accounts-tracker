@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0a0a0a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Accounts Ledger">
+<title>Accounts Department — Daily Ledger</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="favicon.ico?v=2" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/icon-32.png?v=2">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png?v=2">
+<link rel="apple-touch-icon" href="icons/icon-192.png?v=2">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="loginScreen">
+  <div class="login-shell">
+    <div class="login-brand">
+      <div class="brand-mark" aria-hidden="true">AD</div>
+      <h1>Accounts Department</h1>
+      <p class="sub">Daily Ledger · Bookkeeping · Compliance</p>
+    </div>
+    <div class="login-card">
+      <p class="card-heading">Sign In</p>
+      <p class="card-desc">Select Your Name and Enter Your PIN to Continue.</p>
+      <div class="field">
+        <label for="loginName">Name</label>
+        <select id="loginName">
+          <option value="" selected disabled>Select name</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="loginPin">PIN</label>
+        <input type="password" id="loginPin" inputmode="numeric" maxlength="4" autocomplete="current-password">
+      </div>
+      <button class="btn" id="loginBtn">Log In</button>
+      <div class="login-msg" id="loginMsg">Wrong PIN. Try again.</div>
+    </div>
+  </div>
+</div>
+
+<div id="app" style="display:none;">
+  <header class="masthead">
+    <div class="masthead-inner">
+      <div>
+        <h1>Accounts Department — Daily Ledger</h1>
+        <div class="sub" id="headerSub">Bookkeeping · Compliance · Client Workflow Tracker</div>
+      </div>
+      <div class="today-badge">
+        <div class="date" id="todayDate">—</div>
+        <div class="label">Today</div>
+        <div class="sync-status" id="syncStatus"></div>
+        <div class="user-row">
+          <span class="whoami">Logged in as <b id="whoamiName"></b></span>
+          <button class="btn ghost" id="logoutBtn">Log Out</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="stats-row" id="statsRow"></div>
+
+    <div class="timer-panel" id="timerPanel">
+      <div class="timer-bar" id="timerBar">
+        <input type="text" id="timerNote" placeholder="What are you working on?" maxlength="200" autocomplete="off">
+        <select id="timerJob">
+          <option value="">No client</option>
+        </select>
+        <div class="timer-clock" id="timerElapsed">00:00:00</div>
+        <button type="button" class="timer-toggle" id="timerToggle">Start</button>
+      </div>
+      <div class="timer-live" id="timerLive"></div>
+      <div class="worklog-totals" id="timerTotals"></div>
+      <div id="timerList"></div>
+    </div>
+
+    <div class="worklog-panel" id="worklogPanel">
+      <div class="worklog-head">
+        <h2>Daily Work Log</h2>
+        <div class="grp">
+          <label>Date</label>
+          <input type="date" id="logDate">
+        </div>
+      </div>
+      <div class="worklog-totals" id="worklogTotals"></div>
+      <div id="worklogList"></div>
+    </div>
+
+    <div class="toolbar">
+      <div class="grp">
+        <label>Client</label>
+        <select id="filterClient"><option value="">All</option></select>
+      </div>
+      <div class="grp" id="filterStaffGrp">
+        <label>Staff</label>
+        <select id="filterStaff"><option value="">All</option></select>
+      </div>
+      <div class="grp">
+        <label>Status</label>
+        <select id="filterStatus">
+          <option value="">All jobs</option>
+          <option value="active">Active only</option>
+          <option value="complete">Fully completed</option>
+        </select>
+      </div>
+      <div class="spacer"></div>
+      <button class="btn secondary small" id="exportExcelBtn">Export Excel</button>
+      <button class="btn secondary small" id="exportPdfBtn">Export PDF</button>
+      <button class="btn" id="newJobBtn">+ New Client Job</button>
+    </div>
+
+    <div class="board">
+      <table id="jobTable">
+        <thead>
+          <tr>
+            <th class="left">Client / Assigned</th>
+            <th title="Bank Statement Entry">Bank Stmt</th>
+            <th title="Invoice Entry">Invoices</th>
+            <th title="Receipt Entry">Receipts</th>
+            <th title="Payment Voucher Entry">Pmt Voucher</th>
+            <th title="Other Documents Entry">Other Docs</th>
+            <th title="Financial Statements &amp; Tax Working (Excel)">Fin. Stmts / Tax</th>
+            <th title="Audit Report &amp; Management Letter — Stamp &amp; Scan">Audit / Mgmt Ltr</th>
+            <th title="Submission to RAMIS System">RAMIS</th>
+            <th title="Scanning Documents to Client">Client Scan</th>
+            <th class="left">Notes</th>
+            <th class="del-cell"></th>
+          </tr>
+        </thead>
+        <tbody id="jobRows"></tbody>
+      </table>
+      <div class="empty-state" id="emptyState" style="display:none;">
+        <div class="stamp-big">NO ENTRIES</div>
+        <div id="emptyStateMsg">No client jobs match this filter yet. Click "+ New Client Job" to open one.</div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="legend">
+    <span class="item"><span class="dot" style="background:var(--stamp-red-bg); border:1.5px solid var(--stamp-red);"></span>Pending</span>
+    <span class="item"><span class="dot" style="background:var(--stamp-amber-bg); border:1.5px solid var(--stamp-amber);"></span>In Progress</span>
+    <span class="item"><span class="dot" style="background:var(--stamp-green-bg); border:1.5px solid var(--stamp-green);"></span>Completed</span>
+    <span class="item" id="legendHint">Click any stamp to cycle its status.</span>
+  </footer>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <h2>Open New Client Job</h2>
+    <div class="field">
+      <label>Client Name</label>
+      <input type="text" id="inClient" placeholder="e.g. Silva Traders (Pvt) Ltd">
+    </div>
+    <div class="field">
+      <label>Assigned Staff</label>
+      <input type="text" id="inStaff" placeholder="e.g. Dilan">
+    </div>
+    <div class="field">
+      <label>Job Date</label>
+      <input type="date" id="inDate">
+    </div>
+    <div class="err" id="modalErr">Please enter a client name.</div>
+    <div class="modal-actions">
+      <button class="btn secondary" id="cancelBtn">Cancel</button>
+      <button class="btn" id="saveBtn">Create Job</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+<script src="js/pwa.js"></script>
+</body>
+</html>
