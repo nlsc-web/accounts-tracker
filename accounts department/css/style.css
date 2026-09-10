@@ -24,6 +24,7 @@
 html{
   -webkit-text-size-adjust:100%;
   text-size-adjust:100%;
+  color-scheme: light;
 }
 body{
   margin:0;
@@ -485,6 +486,49 @@ td.client-cell .cname{
   font-weight:700;
   color:var(--ink);
   font-size:13.5px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.edit-link{
+  font-family:inherit;
+  font-size:10.5px;
+  font-weight:700;
+  letter-spacing:0.4px;
+  text-transform:uppercase;
+  color:var(--accent-deep);
+  background:transparent;
+  border:1px solid rgba(201,162,39,.45);
+  border-radius:6px;
+  padding:2px 7px;
+  cursor:pointer;
+}
+.edit-link:hover{
+  background:var(--brass-light);
+  border-color:var(--accent);
+}
+.extra-list{
+  margin-top:8px;
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+#otherWorkBar{
+  margin-bottom:8px;
+}
+#otherWorkBar .btn{
+  min-height:44px;
+}
+#otherWorkList .extra-row .stamp{
+  min-width:64px;
+  font-size:9px;
+  padding:3px 4px;
+}
+#otherWorkList .extra-title{
+  flex:1;
+  font-weight:600;
+  color:var(--ink);
 }
 td.client-cell .meta{
   font-size:10.5px;
@@ -602,7 +646,12 @@ td.client-cell .meta{
   background:#fff;
   color:var(--ink);
   min-height:44px;
+  color-scheme: light;
   transition:border-color .15s ease, box-shadow .15s ease;
+}
+.field select option{
+  color:#0a0a0a;
+  background:#fff;
 }
 .field input:hover, .field select:hover{border-color:#a8a59c;}
 .field input:focus, .field select:focus{
@@ -620,6 +669,72 @@ td.client-cell .meta{
   gap:10px;
   margin-top:18px;
 }
+.recycle-count{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:18px;
+  height:18px;
+  margin-left:6px;
+  padding:0 5px;
+  border-radius:999px;
+  background:var(--ink);
+  color:var(--accent);
+  font-size:10px;
+  font-weight:700;
+  vertical-align:middle;
+}
+.recycle-count[hidden]{display:none;}
+.recycle-modal{
+  max-width:720px;
+  max-height:min(86vh, 720px);
+  display:flex;
+  flex-direction:column;
+}
+.recycle-lead{
+  margin:-6px 0 14px;
+  font-size:13px;
+  color:var(--ink-soft);
+  line-height:1.4;
+}
+#recycleList{
+  overflow:auto;
+  min-height:120px;
+  max-height:min(56vh, 420px);
+  border:1px solid var(--paper-line);
+  border-radius:12px;
+  background:#faf9f6;
+}
+.recycle-empty{
+  padding:36px 16px;
+  text-align:center;
+  color:var(--ink-soft);
+  font-size:13px;
+}
+.recycle-section{
+  padding:10px 12px 4px;
+  font-size:10.5px;
+  font-weight:700;
+  letter-spacing:0.6px;
+  text-transform:uppercase;
+  color:var(--accent-deep);
+}
+.recycle-row{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:10px 12px;
+  border-top:1px solid var(--paper-line);
+  font-size:13px;
+  background:#fff;
+  flex-wrap:wrap;
+}
+.recycle-row .rname{font-weight:700; color:var(--ink); min-width:120px; flex:1;}
+.recycle-row .rmeta{font-size:11px; color:var(--ink-soft);}
+.recycle-row .ractions{display:flex; gap:6px; margin-left:auto;}
+#recycleOverlay .modal-actions{justify-content:flex-end;}
+#emptyRecycleBtn{margin-right:auto;}
+#emptyRecycleBtn[hidden]{display:none;}
 .err{color:var(--stamp-red); font-size:11.5px; margin-top:6px; display:none;}
 
 footer.legend{

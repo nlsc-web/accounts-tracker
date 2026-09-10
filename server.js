@@ -92,12 +92,18 @@ app.post('/api/jobs', auth.requireAuth, auth.requireEntry, asyncHandler(async (r
 app.patch('/api/jobs/:id', auth.requireAuth, auth.requireEntry, asyncHandler(async (req, res) => {
   const existing = await db.getJob(req.params.id);
   if (!existing || !auth.ownsJob(req.user, existing)) return res.status(404).json({ error: 'Job not found' });
-  if (req.body && Object.prototype.hasOwnProperty.call(req.body, 'notes')) {
-    const job = await db.updateNotes(req.params.id, req.body.notes);
-    if (!job) return res.status(404).json({ error: 'Job not found' });
-    return res.json(job);
+  const body = req.body || {};
+  const patch = {};
+  if (Object.prototype.hasOwnProperty.call(body, 'client')) patch.client = body.client;
+  if (Object.prototype.hasOwnProperty.call(body, 'date')) patch.date = body.date;
+  if (Object.prototype.hasOwnProperty.call(body, 'notes')) patch.notes = body.notes;
+  if (Object.prototype.hasOwnProperty.call(body, 'staff') && auth.canViewAll(req.user)) {
+    patch.staff = body.staff;
   }
-  return res.status(400).json({ error: 'Nothing to update' });
+  if (!Object.keys(patch).length) return res.status(400).json({ error: 'Nothing to update' });
+  const job = await db.updateJob(req.params.id, patch);
+  if (!job) return res.status(404).json({ error: 'Job not found' });
+  res.json(job);
 }));
 
 app.post('/api/jobs/:id/stages/:stage/cycle', auth.requireAuth, auth.requireEntry, asyncHandler(async (req, res) => {
@@ -108,10 +114,34 @@ app.post('/api/jobs/:id/stages/:stage/cycle', auth.requireAuth, auth.requireEntr
   res.json(result);
 }));
 
+app.post('/api/jobs/:id/extras', auth.requireAuth, auth.requireEntry, asyncHandler(async (req, res) => {
+  const existing = await db.getJob(req.params.id);
+  if (!existing || !auth.ownsJob(req.user, existing)) return res.status(404).json({ error: 'Job not found' });
+  const job = await db.addExtraTask(req.params.id, (req.body || {}).title, req.user.name);
+  if (!job) return res.status(404).json({ error: 'Job not found' });
+  res.status(201).json(job);
+}));
+
+app.post('/api/jobs/:id/extras/:extraId/cycle', auth.requireAuth, auth.requireEntry, asyncHandler(async (req, res) => {
+  const existing = await db.getJob(req.params.id);
+  if (!existing || !auth.ownsJob(req.user, existing)) return res.status(404).json({ error: 'Job not found' });
+  const result = await db.cycleExtraTask(req.params.id, req.params.extraId, req.user.name);
+  if (!result) return res.status(404).json({ error: 'Other work not found' });
+  res.json(result);
+}));
+
+app.delete('/api/jobs/:id/extras/:extraId', auth.requireAuth, auth.requireEntry, asyncHandler(async (req, res) => {
+  const existing = await db.getJob(req.params.id);
+  if (!existing || !auth.ownsJob(req.user, existing)) return res.status(404).json({ error: 'Job not found' });
+  const job = await db.deleteExtraTask(req.params.id, req.params.extraId);
+  if (!job) return res.status(404).json({ error: 'Other work not found' });
+  res.json(job);
+}));
+
 app.delete('/api/jobs/:id', auth.requireAuth, auth.requireEntry, asyncHandler(async (req, res) => {
   const existing = await db.getJob(req.params.id);
   if (!existing || !auth.ownsJob(req.user, existing)) return res.status(404).json({ error: 'Job not found' });
-  const ok = await db.deleteJob(req.params.id);
+  const ok = await db.deleteJob(req.params.id, req.user.name);
   if (!ok) return res.status(404).json({ error: 'Job not found' });
   res.json({ ok: true });
 }));
@@ -159,9 +189,82 @@ app.delete('/api/time-entries/:id', auth.requireAuth, auth.requireEntry, asyncHa
   if (!auth.canViewAll(req.user) && entry.actor !== req.user.name) {
     return res.status(404).json({ error: 'Entry not found' });
   }
-  const ok = await db.deleteTimeEntry(req.params.id);
+  const ok = await db.deleteTimeEntry(req.params.id, req.user.name);
   if (!ok) return res.status(404).json({ error: 'Entry not found' });
   res.json({ ok: true });
+}));
+
+function filterRecycle(user, jobs, timeEntries) {
+  if (auth.canViewAll(user)) return { jobs, timeEntries };
+  return {
+    jobs: jobs.filter((j) => auth.ownsJob(user, j)),
+    timeEntries: timeEntries.filter((e) => e.actor === user.name)
+  };
+}
+
+async function loadRecycle(user) {
+  const [jobs, timeEntries] = await Promise.all([
+    db.listDeletedJobs(),
+    db.listDeletedTimeEntries()
+  ]);
+  return filterRecycle(user, jobs, timeEntries);
+}
+
+app.get('/api/recycle-bin', auth.requireAuth, asyncHandler(async (req, res) => {
+  res.json(await loadRecycle(req.user));
+}));
+
+app.post('/api/recycle-bin/jobs/:id/restore', auth.requireAuth, auth.requireEntry, asyncHandler(async (req, res) => {
+  const existing = await db.getJobAny(req.params.id);
+  if (!existing || !existing.deletedAt || !auth.ownsJob(req.user, existing)) {
+    return res.status(404).json({ error: 'Item not found' });
+  }
+  const job = await db.restoreJob(req.params.id);
+  if (!job) return res.status(404).json({ error: 'Item not found' });
+  res.json(job);
+}));
+
+app.delete('/api/recycle-bin/jobs/:id', auth.requireAuth, auth.requireEntry, asyncHandler(async (req, res) => {
+  const existing = await db.getJobAny(req.params.id);
+  if (!existing || !existing.deletedAt || !auth.ownsJob(req.user, existing)) {
+    return res.status(404).json({ error: 'Item not found' });
+  }
+  const ok = await db.purgeJob(req.params.id);
+  if (!ok) return res.status(404).json({ error: 'Item not found' });
+  res.json({ ok: true });
+}));
+
+app.post('/api/recycle-bin/time-entries/:id/restore', auth.requireAuth, auth.requireEntry, asyncHandler(async (req, res) => {
+  const existing = await db.getTimeEntryAny(req.params.id);
+  if (!existing || !existing.deletedAt) return res.status(404).json({ error: 'Item not found' });
+  if (!auth.canViewAll(req.user) && existing.actor !== req.user.name) {
+    return res.status(404).json({ error: 'Item not found' });
+  }
+  const entry = await db.restoreTimeEntry(req.params.id);
+  if (!entry) return res.status(404).json({ error: 'Item not found' });
+  res.json(entry);
+}));
+
+app.delete('/api/recycle-bin/time-entries/:id', auth.requireAuth, auth.requireEntry, asyncHandler(async (req, res) => {
+  const existing = await db.getTimeEntryAny(req.params.id);
+  if (!existing || !existing.deletedAt) return res.status(404).json({ error: 'Item not found' });
+  if (!auth.canViewAll(req.user) && existing.actor !== req.user.name) {
+    return res.status(404).json({ error: 'Item not found' });
+  }
+  const ok = await db.purgeTimeEntry(req.params.id);
+  if (!ok) return res.status(404).json({ error: 'Item not found' });
+  res.json({ ok: true });
+}));
+
+app.post('/api/recycle-bin/empty', auth.requireAuth, auth.requireEntry, asyncHandler(async (req, res) => {
+  const bin = await loadRecycle(req.user);
+  for (const job of bin.jobs) {
+    await db.purgeJob(job.id);
+  }
+  for (const entry of bin.timeEntries) {
+    await db.purgeTimeEntry(entry.id);
+  }
+  res.json({ ok: true, purged: bin.jobs.length + bin.timeEntries.length });
 }));
 
 app.get('*', (req, res) => {

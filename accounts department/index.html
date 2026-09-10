@@ -33,6 +33,13 @@
         <label for="loginName">Name</label>
         <select id="loginName">
           <option value="" selected disabled>Select name</option>
+          <option value="Mrs.Lakmali">Mrs.Lakmali (view)</option>
+          <option value="Ms.Sajini">Ms.Sajini</option>
+          <option value="Mr.Denuwan">Mr.Denuwan</option>
+          <option value="Dilan">Dilan</option>
+          <option value="Dilini">Dilini</option>
+          <option value="Malik">Malik</option>
+          <option value="Asjath">Asjath</option>
         </select>
       </div>
       <div class="field">
@@ -71,7 +78,7 @@
       <div class="timer-bar" id="timerBar">
         <input type="text" id="timerNote" placeholder="What are you working on?" maxlength="200" autocomplete="off">
         <select id="timerJob">
-          <option value="">No client</option>
+          <option value="">Select client</option>
         </select>
         <div class="timer-clock" id="timerElapsed">00:00:00</div>
         <button type="button" class="timer-toggle" id="timerToggle">Start</button>
@@ -79,6 +86,20 @@
       <div class="timer-live" id="timerLive"></div>
       <div class="worklog-totals" id="timerTotals"></div>
       <div id="timerList"></div>
+    </div>
+
+    <div class="timer-panel" id="otherWorkPanel">
+      <div class="worklog-head">
+        <h2>Other Work</h2>
+      </div>
+      <form class="timer-bar" id="otherWorkBar">
+        <input type="text" id="otherWorkTitle" placeholder="Type other work…" maxlength="120" autocomplete="off">
+        <select id="otherWorkJob">
+          <option value="">Select client</option>
+        </select>
+        <button type="submit" class="btn" id="otherWorkAdd">Add</button>
+      </form>
+      <div id="otherWorkList"></div>
     </div>
 
     <div class="worklog-panel" id="worklogPanel">
@@ -113,6 +134,7 @@
       <div class="spacer"></div>
       <button class="btn secondary small" id="exportExcelBtn">Export Excel</button>
       <button class="btn secondary small" id="exportPdfBtn">Export PDF</button>
+      <button class="btn secondary small" id="recycleBtn">Recycle Bin <span class="recycle-count" id="recycleCount" hidden>0</span></button>
       <button class="btn" id="newJobBtn">+ New Client Job</button>
     </div>
 
@@ -153,7 +175,7 @@
 
 <div class="modal-overlay" id="modalOverlay">
   <div class="modal">
-    <h2>Open New Client Job</h2>
+    <h2 id="jobModalTitle">Open New Client Job</h2>
     <div class="field">
       <label>Client Name</label>
       <input type="text" id="inClient" placeholder="e.g. Silva Traders (Pvt) Ltd">
@@ -170,6 +192,18 @@
     <div class="modal-actions">
       <button class="btn secondary" id="cancelBtn">Cancel</button>
       <button class="btn" id="saveBtn">Create Job</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="recycleOverlay">
+  <div class="modal recycle-modal">
+    <h2>Recycle Bin</h2>
+    <p class="recycle-lead">Deleted jobs and time entries stay here until you restore them or delete them forever.</p>
+    <div id="recycleList"></div>
+    <div class="modal-actions">
+      <button class="btn danger" id="emptyRecycleBtn" hidden>Empty Bin</button>
+      <button class="btn secondary" id="closeRecycleBtn">Close</button>
     </div>
   </div>
 </div>

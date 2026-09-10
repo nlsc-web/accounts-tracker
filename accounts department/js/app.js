@@ -26,6 +26,8 @@ let currentUser = '';
 let currentRole = '';
 let currentViewAll = false;
 let timeEntries = [];
+let recycleBin = { jobs: [], timeEntries: [] };
+let editingJobId = '';
 let worklogNameFilter = '';
 let timerNameFilter = '';
 let pollTimer = null;
@@ -105,6 +107,7 @@ function setSyncStatus(state, message){
 function fillLoginUsers(list){
   const users = Array.isArray(list) && list.length ? list : FALLBACK_USERS;
   const sel = document.getElementById('loginName');
+  if(!sel) return;
   const current = sel.value;
   sel.innerHTML = '<option value="" disabled>Select name</option>';
   users.forEach(u => {
@@ -113,7 +116,7 @@ function fillLoginUsers(list){
     o.textContent = u.name + (u.role === 'viewer' ? ' (view)' : '');
     sel.appendChild(o);
   });
-  if(current) sel.value = current;
+  if(current && [...sel.options].some(o => o.value === current)) sel.value = current;
   else sel.options[0].selected = true;
 }
 
@@ -135,6 +138,8 @@ function applyRoleUI(){
   if(worklogPanel) worklogPanel.style.display = viewAll ? '' : 'none';
   const timerBar = document.getElementById('timerBar');
   if(timerBar) timerBar.style.display = viewer ? 'none' : '';
+  const otherWorkBar = document.getElementById('otherWorkBar');
+  if(otherWorkBar) otherWorkBar.style.display = viewer ? 'none' : '';
   if(hint) hint.textContent = viewer
     ? (viewAll ? 'View-only: you can see every job. Stamps cannot be changed from this account.' : 'View-only: stamps cannot be changed from this account.')
     : 'Click any stamp to cycle its status.';
@@ -236,10 +241,56 @@ function fillTimerJobs(){
   if(!sel) return;
   const running = myRunningTimer();
   const cur = running && running.jobId ? running.jobId : sel.value;
-  sel.innerHTML = '<option value="">No client</option>' + jobs.map(j =>
+  sel.innerHTML = '<option value="">Select client</option>' + jobs.map(j =>
     `<option value="${escapeHtml(j.id)}">${escapeHtml(j.client)}</option>`
   ).join('');
   if([...sel.options].some(o => o.value === cur)) sel.value = cur;
+}
+
+function fillOtherWorkJobs(){
+  const sel = document.getElementById('otherWorkJob');
+  if(!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Select client</option>' + jobs.map(j =>
+    `<option value="${escapeHtml(j.id)}">${escapeHtml(j.client)}</option>`
+  ).join('');
+  if([...sel.options].some(o => o.value === cur)) sel.value = cur;
+  else if(jobs.length === 1) sel.value = jobs[0].id;
+}
+
+function renderOtherWork(){
+  const list = document.getElementById('otherWorkList');
+  if(!list) return;
+  fillOtherWorkJobs();
+  const viewer = isViewer();
+  const items = [];
+  jobs.forEach(j => {
+    (j.extraTasks || []).forEach(t => {
+      items.push({
+        id: t.id,
+        title: t.title,
+        status: t.status,
+        jobId: j.id,
+        client: j.client,
+        staff: j.staff
+      });
+    });
+  });
+  if(items.length === 0){
+    list.innerHTML = '<div class="worklog-empty">No other work typed yet.</div>';
+    return;
+  }
+  list.innerHTML = items.map(t => {
+    const readonly = viewer ? ' readonly' : '';
+    const delBtn = viewer ? '' : `<button type="button" class="btn danger small" data-del-extra="${escapeHtml(t.id)}" data-job="${escapeHtml(t.jobId)}" aria-label="Remove other work">✕</button>`;
+    return `<div class="timer-row extra-row">
+      <span class="tclient">${escapeHtml(t.client || '—')}</span>
+      <span class="tnote extra-title">${escapeHtml(t.title)}</span>
+      <span class="tactor">${escapeHtml(t.staff || '')}</span>
+      <span class="stamp ${t.status}${readonly}" data-job="${escapeHtml(t.jobId)}" data-extra="${escapeHtml(t.id)}" title="Other work — click to change">${STAMP_TEXT[t.status]}</span>
+      ${delBtn}
+    </div>`;
+  }).join('');
 }
 
 function tickTimers(){
@@ -324,7 +375,9 @@ function renderTimer(){
   }).join('');
 }
 
-function findStageLabel(key){
+function findStageLabel(key, detail){
+  if(detail) return detail;
+  if(String(key || '').startsWith('extra:')) return 'Other work';
   const s = STAGES.find(x=>x.key===key);
   return s ? s.label : key;
 }
@@ -375,7 +428,7 @@ function renderWorklog(){
       <span class="wclient">${escapeHtml(e.client)}</span>
       <span class="wstaff">${escapeHtml(e.staff || 'Unassigned')}</span>
       ${actor}
-      <span class="wstage">${escapeHtml(findStageLabel(e.stage))}</span>
+      <span class="wstage">${escapeHtml(findStageLabel(e.stage, e.detail))}</span>
       <span class="wstatus ${e.status}">${STAMP_TEXT[e.status] || e.status}</span>
       ${durHtml}
     </div>`;
@@ -387,6 +440,7 @@ function render(){
   fillTimerJobs();
   renderStats();
   renderTimer();
+  renderOtherWork();
   if(canViewAll()) renderWorklog();
   const rows = document.getElementById('jobRows');
   const filtered = getFiltered();
@@ -415,9 +469,10 @@ function render(){
     }).join('');
     const notesDisabled = viewer ? ' disabled' : '';
     const delBtn = viewer ? '' : `<button class="btn danger small" data-del="${job.id}" aria-label="Delete job">✕</button>`;
+    const editBtn = viewer ? '' : `<button type="button" class="edit-link" data-edit="${job.id}">Edit</button>`;
     return `<tr>
       <td class="client-cell">
-        <div class="cname">${escapeHtml(job.client)}</div>
+        <div class="cname"><span>${escapeHtml(job.client)}</span>${editBtn}</div>
         <div class="meta">${escapeHtml(job.staff || 'Unassigned')} · ${fmtDate(job.date)}</div>
       </td>
       ${stageCells}
@@ -425,6 +480,79 @@ function render(){
       <td class="del-cell">${delBtn}</td>
     </tr>`;
   }).join('');
+}
+
+function fmtDeletedAt(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  if(Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString('en-GB', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+}
+
+function recycleCount(){
+  return (recycleBin.jobs || []).length + (recycleBin.timeEntries || []).length;
+}
+
+function updateRecycleBadge(){
+  const el = document.getElementById('recycleCount');
+  if(!el) return;
+  const n = recycleCount();
+  el.textContent = String(n);
+  el.hidden = n === 0;
+}
+
+function recycleActions(kind, id){
+  if(isViewer()) return '';
+  return `<span class="ractions">
+    <button type="button" class="btn small" data-restore-${kind}="${escapeHtml(id)}">Restore</button>
+    <button type="button" class="btn danger small" data-purge-${kind}="${escapeHtml(id)}">Delete forever</button>
+  </span>`;
+}
+
+function renderRecycleBin(){
+  const list = document.getElementById('recycleList');
+  const emptyBtn = document.getElementById('emptyRecycleBtn');
+  if(!list) return;
+  const jobs = recycleBin.jobs || [];
+  const times = recycleBin.timeEntries || [];
+  const n = jobs.length + times.length;
+  if(emptyBtn) emptyBtn.hidden = isViewer() || n === 0;
+  if(n === 0){
+    list.innerHTML = '<div class="recycle-empty">Recycle Bin is empty.</div>';
+    return;
+  }
+  const jobRows = jobs.map(j => `<div class="recycle-row">
+    <div>
+      <div class="rname">${escapeHtml(j.client || 'Untitled job')}</div>
+      <div class="rmeta">${escapeHtml(j.staff || 'Unassigned')} · ${escapeHtml(fmtDate(j.date))} · deleted ${escapeHtml(fmtDeletedAt(j.deletedAt))}${j.deletedBy ? ' by ' + escapeHtml(j.deletedBy) : ''}</div>
+    </div>
+    ${recycleActions('job', j.id)}
+  </div>`).join('');
+  const timeRows = times.map(e => `<div class="recycle-row">
+    <div>
+      <div class="rname">${escapeHtml(e.client || e.note || 'Time entry')}</div>
+      <div class="rmeta">${escapeHtml(e.actor || '')}${e.note ? ' · ' + escapeHtml(e.note) : ''} · ${escapeHtml(formatDuration(e.durationMs) || formatClock(e.durationMs))} · deleted ${escapeHtml(fmtDeletedAt(e.deletedAt))}</div>
+    </div>
+    ${recycleActions('time', e.id)}
+  </div>`).join('');
+  list.innerHTML =
+    (jobs.length ? `<div class="recycle-section">Client jobs</div>${jobRows}` : '') +
+    (times.length ? `<div class="recycle-section">Time entries</div>${timeRows}` : '');
+}
+
+async function loadRecycleBin(){
+  try{
+    const res = await apiFetch('/api/recycle-bin');
+    if(!res.ok) throw new Error('Failed to load recycle bin');
+    recycleBin = await res.json();
+    if(!recycleBin || typeof recycleBin !== 'object') recycleBin = { jobs: [], timeEntries: [] };
+    recycleBin.jobs = Array.isArray(recycleBin.jobs) ? recycleBin.jobs : [];
+    recycleBin.timeEntries = Array.isArray(recycleBin.timeEntries) ? recycleBin.timeEntries : [];
+    updateRecycleBadge();
+    if(document.getElementById('recycleOverlay').classList.contains('open')) renderRecycleBin();
+  }catch(e){
+    console.error(e);
+  }
 }
 
 async function loadBoard(){
@@ -444,6 +572,7 @@ async function loadBoard(){
     timeEntries = timeRes.ok ? await timeRes.json() : [];
     render();
     setSyncStatus('ok', 'Saved');
+    loadRecycleBin();
   }catch(e){
     console.error(e);
     setSyncStatus('error');
@@ -483,6 +612,9 @@ async function restoreSession(){
     console.error(e);
   }
 }
+
+fillLoginUsers(FALLBACK_USERS);
+restoreSession();
 
 document.getElementById('loginBtn').addEventListener('click', async ()=>{
   const name = document.getElementById('loginName').value;
@@ -528,9 +660,11 @@ document.getElementById('logoutBtn').addEventListener('click', async ()=>{
   currentViewAll = false;
   worklogNameFilter = '';
   timerNameFilter = '';
+  editingJobId = '';
   jobs = [];
   activityLog = [];
   timeEntries = [];
+  recycleBin = { jobs: [], timeEntries: [] };
   showLogin();
 });
 
@@ -553,11 +687,16 @@ document.getElementById('jobRows').addEventListener('click', async (e)=>{
     }
     return;
   }
+  const editBtn = e.target.closest('[data-edit]');
+  if(editBtn){
+    openJobModal(jobs.find(j => j.id === editBtn.dataset.edit) || null);
+    return;
+  }
   const delBtn = e.target.closest('[data-del]');
   if(delBtn){
     const jobId = delBtn.dataset.del;
     const job = jobs.find(j=>j.id===jobId);
-    if(job && confirm(`Delete job for "${job.client}"? This cannot be undone.`)){
+    if(job && confirm(`Move job for "${job.client}" to the Recycle Bin?`)){
       setSyncStatus('saving');
       try{
         const res = await apiFetch('/api/jobs/' + encodeURIComponent(jobId), { method: 'DELETE' });
@@ -568,6 +707,73 @@ document.getElementById('jobRows').addEventListener('click', async (e)=>{
         setSyncStatus('error');
       }
     }
+  }
+});
+
+document.getElementById('otherWorkBar')?.addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  if(isViewer()) return;
+  const title = document.getElementById('otherWorkTitle').value.trim();
+  const jobId = document.getElementById('otherWorkJob').value;
+  if(!title){
+    setSyncStatus('error', 'Type the other work first');
+    return;
+  }
+  if(!jobId){
+    setSyncStatus('error', 'Select a client for this other work');
+    return;
+  }
+  setSyncStatus('saving');
+  try{
+    const res = await apiFetch('/api/jobs/' + encodeURIComponent(jobId) + '/extras', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title })
+    });
+    const data = await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(data.error || 'Could not add other work');
+    document.getElementById('otherWorkTitle').value = '';
+    await loadBoard();
+  }catch(err){
+    console.error(err);
+    setSyncStatus('error', err.message || 'Sync failed — tap to retry');
+  }
+});
+
+document.getElementById('otherWorkList')?.addEventListener('click', async (e)=>{
+  if(isViewer()) return;
+  const extraStamp = e.target.closest('[data-extra]');
+  if(extraStamp){
+    const jobId = extraStamp.dataset.job;
+    const extraId = extraStamp.dataset.extra;
+    setSyncStatus('saving');
+    try{
+      const res = await apiFetch(`/api/jobs/${encodeURIComponent(jobId)}/extras/${encodeURIComponent(extraId)}/cycle`, {
+        method: 'POST'
+      });
+      if(!res.ok) throw new Error('Cycle failed');
+      await loadBoard();
+    }catch(err){
+      console.error(err);
+      setSyncStatus('error');
+    }
+    return;
+  }
+  const delExtraBtn = e.target.closest('[data-del-extra]');
+  if(!delExtraBtn) return;
+  const jobId = delExtraBtn.dataset.job;
+  const extraId = delExtraBtn.getAttribute('data-del-extra');
+  if(!confirm('Remove this other work?')) return;
+  setSyncStatus('saving');
+  try{
+    const res = await apiFetch(`/api/jobs/${encodeURIComponent(jobId)}/extras/${encodeURIComponent(extraId)}`, {
+      method: 'DELETE'
+    });
+    if(!res.ok) throw new Error('Delete failed');
+    await loadBoard();
+  }catch(err){
+    console.error(err);
+    setSyncStatus('error');
   }
 });
 
@@ -610,7 +816,7 @@ document.getElementById('timerList').addEventListener('click', async (e)=>{
   const id = delBtn.getAttribute('data-del-time');
   const entry = timeEntries.find(t => t.id === id);
   const label = entry ? (entry.client || entry.note || 'this time entry') : 'this time entry';
-  if(!confirm(`Delete time for "${label}"? This cannot be undone.`)) return;
+  if(!confirm(`Move time for "${label}" to the Recycle Bin?`)) return;
   setSyncStatus('saving');
   try{
     const res = await apiFetch('/api/time-entries/' + encodeURIComponent(id), { method: 'DELETE' });
@@ -658,42 +864,121 @@ document.getElementById('timerNote').addEventListener('keydown', (e)=>{
 });
 
 const overlay = document.getElementById('modalOverlay');
-document.getElementById('newJobBtn').addEventListener('click', ()=>{
+function openJobModal(job){
   if(isViewer()) return;
-  document.getElementById('inClient').value = '';
-  document.getElementById('inStaff').value = currentUser || '';
+  editingJobId = job && job.id ? job.id : '';
+  document.getElementById('jobModalTitle').textContent = editingJobId ? 'Edit Client Job' : 'Open New Client Job';
+  document.getElementById('saveBtn').textContent = editingJobId ? 'Save Changes' : 'Create Job';
+  document.getElementById('inClient').value = job ? (job.client || '') : '';
+  document.getElementById('inStaff').value = job ? (job.staff || currentUser || '') : (currentUser || '');
   document.getElementById('inStaff').readOnly = !canViewAll();
-  document.getElementById('inDate').value = todayISO();
+  document.getElementById('inDate').value = job && job.date ? job.date : todayISO();
   document.getElementById('modalErr').style.display = 'none';
   overlay.classList.add('open');
   document.getElementById('inClient').focus();
+}
+document.getElementById('newJobBtn').addEventListener('click', ()=> openJobModal(null));
+document.getElementById('cancelBtn').addEventListener('click', ()=>{
+  editingJobId = '';
+  overlay.classList.remove('open');
 });
-document.getElementById('cancelBtn').addEventListener('click', ()=> overlay.classList.remove('open'));
-overlay.addEventListener('click', (e)=>{ if(e.target === overlay) overlay.classList.remove('open'); });
+overlay.addEventListener('click', (e)=>{
+  if(e.target === overlay){
+    editingJobId = '';
+    overlay.classList.remove('open');
+  }
+});
+
+const recycleOverlay = document.getElementById('recycleOverlay');
+document.getElementById('recycleBtn').addEventListener('click', async ()=>{
+  await loadRecycleBin();
+  renderRecycleBin();
+  recycleOverlay.classList.add('open');
+});
+document.getElementById('closeRecycleBtn').addEventListener('click', ()=> recycleOverlay.classList.remove('open'));
+recycleOverlay.addEventListener('click', (e)=>{ if(e.target === recycleOverlay) recycleOverlay.classList.remove('open'); });
+
+document.getElementById('recycleList').addEventListener('click', async (e)=>{
+  if(isViewer()) return;
+  const restoreJob = e.target.closest('[data-restore-job]');
+  const purgeJob = e.target.closest('[data-purge-job]');
+  const restoreTime = e.target.closest('[data-restore-time]');
+  const purgeTime = e.target.closest('[data-purge-time]');
+  let url = '';
+  let method = 'POST';
+  if(restoreJob){
+    url = '/api/recycle-bin/jobs/' + encodeURIComponent(restoreJob.getAttribute('data-restore-job')) + '/restore';
+  }else if(purgeJob){
+    if(!confirm('Permanently delete this job and its time/work log? This cannot be undone.')) return;
+    url = '/api/recycle-bin/jobs/' + encodeURIComponent(purgeJob.getAttribute('data-purge-job'));
+    method = 'DELETE';
+  }else if(restoreTime){
+    url = '/api/recycle-bin/time-entries/' + encodeURIComponent(restoreTime.getAttribute('data-restore-time')) + '/restore';
+  }else if(purgeTime){
+    if(!confirm('Permanently delete this time entry? This cannot be undone.')) return;
+    url = '/api/recycle-bin/time-entries/' + encodeURIComponent(purgeTime.getAttribute('data-purge-time'));
+    method = 'DELETE';
+  }else{
+    return;
+  }
+  setSyncStatus('saving');
+  try{
+    const res = await apiFetch(url, { method });
+    if(!res.ok){
+      const data = await res.json().catch(()=>({}));
+      throw new Error(data.error || 'Recycle action failed');
+    }
+    await Promise.all([loadBoard(), loadRecycleBin()]);
+    renderRecycleBin();
+  }catch(err){
+    console.error(err);
+    setSyncStatus('error', err.message || 'Sync failed — tap to retry');
+  }
+});
+
+document.getElementById('emptyRecycleBtn').addEventListener('click', async ()=>{
+  if(isViewer()) return;
+  const n = recycleCount();
+  if(!n) return;
+  if(!confirm(`Permanently delete ${n} item${n === 1 ? '' : 's'} in Recycle Bin? This cannot be undone.`)) return;
+  setSyncStatus('saving');
+  try{
+    const res = await apiFetch('/api/recycle-bin/empty', { method: 'POST' });
+    if(!res.ok) throw new Error('Empty failed');
+    await Promise.all([loadBoard(), loadRecycleBin()]);
+    renderRecycleBin();
+  }catch(err){
+    console.error(err);
+    setSyncStatus('error');
+  }
+});
 
 document.getElementById('saveBtn').addEventListener('click', async ()=>{
   const client = document.getElementById('inClient').value.trim();
   const staff = document.getElementById('inStaff').value.trim();
   const date = document.getElementById('inDate').value || todayISO();
   if(!client){
+    document.getElementById('modalErr').textContent = 'Please enter a client name.';
     document.getElementById('modalErr').style.display = 'block';
     return;
   }
   setSyncStatus('saving');
   try{
-    const res = await apiFetch('/api/jobs', {
-      method: 'POST',
+    const isEdit = Boolean(editingJobId);
+    const res = await apiFetch(isEdit ? '/api/jobs/' + encodeURIComponent(editingJobId) : '/api/jobs', {
+      method: isEdit ? 'PATCH' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ client, staff, date })
     });
     const data = await res.json().catch(()=>({}));
     if(!res.ok){
-      document.getElementById('modalErr').textContent = data.error || 'Could not create job.';
+      document.getElementById('modalErr').textContent = data.error || (isEdit ? 'Could not save job.' : 'Could not create job.');
       document.getElementById('modalErr').style.display = 'block';
       setSyncStatus('error');
       return;
     }
     overlay.classList.remove('open');
+    editingJobId = '';
     await loadBoard();
   }catch(err){
     console.error(err);
@@ -781,5 +1066,3 @@ document.getElementById('exportPdfBtn').addEventListener('click', ()=>{
   w.focus();
   setTimeout(() => { try{ w.print(); }catch(e){} }, 300);
 });
-
-restoreSession();
