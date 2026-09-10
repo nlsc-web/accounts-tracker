@@ -4,7 +4,7 @@ Accounts Department daily ledger (Express + SQLite locally, Postgres in producti
 
 Same layout as the marketing tracker: one Node server, PIN login, static frontend.
 
-Live app: _deploy in progress — URL will be added here_
+Live app: [https://accounts-tracker-as1h.onrender.com](https://accounts-tracker-as1h.onrender.com)
 
 ## Use on a laptop (staff)
 
