@@ -153,6 +153,17 @@ app.post('/api/timer/stop', auth.requireAuth, auth.requireEntry, asyncHandler(as
   res.json(entry);
 }));
 
+app.delete('/api/time-entries/:id', auth.requireAuth, auth.requireEntry, asyncHandler(async (req, res) => {
+  const entry = await db.getTimeEntry(req.params.id);
+  if (!entry) return res.status(404).json({ error: 'Entry not found' });
+  if (!auth.canViewAll(req.user) && entry.actor !== req.user.name) {
+    return res.status(404).json({ error: 'Entry not found' });
+  }
+  const ok = await db.deleteTimeEntry(req.params.id);
+  if (!ok) return res.status(404).json({ error: 'Entry not found' });
+  res.json({ ok: true });
+}));
+
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api/')) {
     return res.status(404).json({ error: 'Not found' });

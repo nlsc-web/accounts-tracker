@@ -274,6 +274,8 @@ function createSqliteStore() {
       return { job: await this.getJob(id), log };
     },
     async deleteJob(id) {
+      db.prepare('DELETE FROM time_entries WHERE jobId = ?').run(id);
+      db.prepare('DELETE FROM activity_log WHERE jobId = ?').run(id);
       return db.prepare('DELETE FROM jobs WHERE id = ?').run(id).changes > 0;
     },
     async listActivity(date) {
@@ -332,6 +334,12 @@ function createSqliteStore() {
       if (!prev) return null;
       db.prepare('UPDATE time_entries SET endTs = ? WHERE id = ?').run(ts, prev.id);
       return rowToTimeEntry({ ...prev, endTs: ts });
+    },
+    async getTimeEntry(id) {
+      return rowToTimeEntry(db.prepare('SELECT * FROM time_entries WHERE id = ?').get(id));
+    },
+    async deleteTimeEntry(id) {
+      return db.prepare('DELETE FROM time_entries WHERE id = ?').run(id).changes > 0;
     },
     async health() {
       return { driver: 'sqlite', file: DB_FILE };
@@ -436,6 +444,8 @@ async function createPostgresStore(connectionString) {
       return { job: await this.getJob(id), log };
     },
     async deleteJob(id) {
+      await pool.query('DELETE FROM time_entries WHERE "jobId" = $1', [id]);
+      await pool.query('DELETE FROM activity_log WHERE "jobId" = $1', [id]);
       const res = await pool.query('DELETE FROM jobs WHERE id = $1', [id]);
       return res.rowCount > 0;
     },
@@ -502,6 +512,14 @@ async function createPostgresStore(connectionString) {
       await pool.query('UPDATE time_entries SET "endTs" = $1 WHERE id = $2', [ts, prev.id]);
       return rowToTimeEntry({ ...prev, endTs: ts });
     },
+    async getTimeEntry(id) {
+      const res = await pool.query('SELECT * FROM time_entries WHERE id = $1', [id]);
+      return rowToTimeEntry(res.rows[0]);
+    },
+    async deleteTimeEntry(id) {
+      const res = await pool.query('DELETE FROM time_entries WHERE id = $1', [id]);
+      return res.rowCount > 0;
+    },
     async health() {
       await pool.query('SELECT 1');
       return { driver: 'postgres' };
@@ -536,5 +554,7 @@ module.exports = {
   getRunningTimer: async (actor) => (await getStore()).getRunningTimer(actor),
   startTimer: async (body) => (await getStore()).startTimer(body),
   stopTimer: async (actor) => (await getStore()).stopTimer(actor),
+  getTimeEntry: async (id) => (await getStore()).getTimeEntry(id),
+  deleteTimeEntry: async (id) => (await getStore()).deleteTimeEntry(id),
   health: async () => (await getStore()).health()
 };

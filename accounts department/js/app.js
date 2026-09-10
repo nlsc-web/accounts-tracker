@@ -311,6 +311,7 @@ function renderTimer(){
       ? `<span class="tdur" data-live-start="${e.startTs}">${formatClock(Date.now() - e.startTs)}</span>`
       : `<span class="tdur">${escapeHtml(formatDuration(e.durationMs) || formatClock(e.durationMs))}</span>`;
     const badge = e.running ? '<span class="tbadge">LIVE</span>' : '';
+    const delBtn = isViewer() ? '' : `<button type="button" class="btn danger small" data-del-time="${escapeHtml(e.id)}" aria-label="Delete time entry">✕</button>`;
     return `<div class="timer-row">
       <span class="ttime">${fmtClockTime(e.startTs)} – ${endLabel}</span>
       <span class="tclient">${escapeHtml(e.client || '—')}</span>
@@ -318,6 +319,7 @@ function renderTimer(){
       <span class="tactor">${escapeHtml(e.actor)}</span>
       ${badge}
       ${dur}
+      ${delBtn}
     </div>`;
   }).join('');
 }
@@ -600,6 +602,24 @@ document.getElementById('worklogTotals').addEventListener('click', (e)=>{
   if(!btn) return;
   worklogNameFilter = btn.getAttribute('data-log-name') || '';
   renderWorklog();
+});
+document.getElementById('timerList').addEventListener('click', async (e)=>{
+  if(isViewer()) return;
+  const delBtn = e.target.closest('[data-del-time]');
+  if(!delBtn) return;
+  const id = delBtn.getAttribute('data-del-time');
+  const entry = timeEntries.find(t => t.id === id);
+  const label = entry ? (entry.client || entry.note || 'this time entry') : 'this time entry';
+  if(!confirm(`Delete time for "${label}"? This cannot be undone.`)) return;
+  setSyncStatus('saving');
+  try{
+    const res = await apiFetch('/api/time-entries/' + encodeURIComponent(id), { method: 'DELETE' });
+    if(!res.ok) throw new Error('Delete failed');
+    await loadBoard();
+  }catch(err){
+    console.error(err);
+    setSyncStatus('error');
+  }
 });
 document.getElementById('timerTotals').addEventListener('click', (e)=>{
   const btn = e.target.closest('[data-timer-name]');

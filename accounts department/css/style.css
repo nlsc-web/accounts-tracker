@@ -241,6 +241,7 @@ main{
   text-align:right;
   font-variant-numeric:tabular-nums;
 }
+.timer-row .btn.danger.small{padding:3px 8px; font-size:11px;}
 .timer-row .tbadge{
   font-size:10px;
   font-weight:700;
